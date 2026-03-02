@@ -117,10 +117,19 @@ ENTRY="## [$NEW_VER] - $DATE"$'\n'
 # ── Update CHANGELOG.md ──────────────────────────────────────────────
 if [[ -f CHANGELOG.md ]]; then
     # Insert new entry after the ## [Unreleased] section header
-    awk -v entry="$ENTRY" '
-        /^## \[Unreleased\]/ { print; print ""; print entry; next }
+    entry_tmp=$(mktemp "${TMPDIR:-/tmp}/shemacs-release-entry.XXXXXX")
+    printf '%s\n' "$ENTRY" > "$entry_tmp"
+    awk -v entry_file="$entry_tmp" '
+        BEGIN {
+            while ((getline line < entry_file) > 0) {
+                entry = entry line "\n"
+            }
+            close(entry_file)
+        }
+        /^## \[Unreleased\]/ { printf "%s\n\n%s", $0, entry; next }
         { print }
     ' CHANGELOG.md > CHANGELOG.md.tmp
+    rm -f "$entry_tmp"
     mv CHANGELOG.md.tmp CHANGELOG.md
 else
     printf '# Changelog\n\nAll notable changes are documented here.\nFormat follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).\n\n## [Unreleased]\n\n%s\n' "$ENTRY" > CHANGELOG.md
