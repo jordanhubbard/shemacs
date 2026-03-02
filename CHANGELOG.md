@@ -5,6 +5,16 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.0.7] - 2026-03-02
+
+### Fixed
+- show progress while Scheme cache builds
+- make release changelog insertion awk-safe
+
+### Other
+- perf: pre-compile and cache Scheme interpreter state for fast startup
+
+
 ## [1.0.6] - 2026-03-01
 
 
