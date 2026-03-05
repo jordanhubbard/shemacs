@@ -5,8 +5,9 @@
 # Then run:  em [filename]
 # Or run standalone:  bash em.scm.sh [filename]
 #
-# All editor logic and I/O is in em.scm (Scheme).
-# This file loads the sheme interpreter (bs.sh) and calls em-main.
+# All editor logic is in em.scm (Scheme), compiled to native bash via bs-compile.
+# On first run, this file compiles em.scm and caches the result; subsequent
+# runs source the compiled cache directly — no interpreter needed at runtime.
 #
 # Requires sheme to be installed: https://github.com/jordanhubbard/sheme
 #   Install:  cd ~/src/sheme && make install   (puts ~/.bs.sh in place)
@@ -25,41 +26,6 @@ if [[ "${BASH_VERSINFO:-0}" -lt 4 ]]; then
     return 2>/dev/null || exit 1
 fi
 
-# --- Cache helpers for Scheme interpreter state ---
-
-_em_save_cache() {
-    local cache_file="$1" source_file="$2"
-    local tmp_file="${cache_file}.tmp.$$"
-    {
-        printf '# shemacs cache -- %s\n' "$source_file"
-        # Associative arrays: declare -A → declare -gA (global scope)
-        declare -p __bs_car __bs_cdr \
-            __bs_closure_params __bs_closure_body __bs_closure_env \
-            __bs_env __bs_env_parent | sed 's/^declare -A /declare -gA /'
-        # Scalars: declare -- → declare -g --
-        declare -p __bs_heap_next __bs_env_next | sed 's/^declare -- /declare -g -- /'
-        # Re-export top-level defines as bash globals (replicates define side-effect)
-        local key name
-        for key in "${!__bs_env[@]}"; do
-            [[ "$key" == 0:* ]] || continue
-            name="${key#0:}"
-            [[ "$name" =~ ^[a-zA-Z_][a-zA-Z0-9_]*$ ]] || continue
-            printf 'declare -g %s=%q\n' "$name" "${__bs_env[$key]}"
-        done
-    } > "$tmp_file"
-    mv -f "$tmp_file" "$cache_file" 2>/dev/null || { rm -f "$tmp_file"; return 1; }
-}
-
-_em_load_cache() {
-    source "$1" || return 1
-    # Validate: counters must exist and env 0 must have bindings
-    [[ -n "${__bs_heap_next:-}" && -n "${__bs_env_next:-}" ]] || return 1
-    local key; for key in "${!__bs_env[@]}"; do
-        [[ "$key" == 0:* ]] && return 0
-    done
-    return 1
-}
-
 em() {
     local _em_script_dir
     _em_script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" 2>/dev/null && pwd)" || _em_script_dir=""
@@ -67,29 +33,17 @@ em() {
     # Enable checkwinsize so LINES and COLUMNS are updated
     shopt -s checkwinsize 2>/dev/null
 
-    # Source the sheme interpreter if not already loaded.
-    # Search order: installed ~/.bs.sh, sibling sheme/ repo, common prefixes.
-    local _em_bs_path=""
-    if ! type bs &>/dev/null; then
-        local _bs_found=""
-        for _bs_candidate in \
-                "$HOME/.bs.sh" \
-                "${_em_script_dir:+$_em_script_dir/../sheme/bs.sh}" \
-                /usr/local/lib/sheme/bs.sh \
-                /opt/sheme/bs.sh; do
-            [[ -n "$_bs_candidate" && -f "$_bs_candidate" ]] || continue
-            # shellcheck source=/dev/null
-            source "$_bs_candidate" && _bs_found="$_bs_candidate" && break
-        done
-        if [[ -z "$_bs_found" ]]; then
-            echo "em: cannot find bs.sh — install sheme: https://github.com/jordanhubbard/sheme" >&2
-            return 1
-        fi
-        _em_bs_path="$_bs_found"
-    else
-        _em_bs_path="$HOME/.bs.sh"
-    fi
-    bs-reset
+    # Find bs.sh path (needed for cache staleness check and compilation)
+    local _em_bs_path="" _em_bs_candidates=()
+    for _bs_candidate in \
+            "$HOME/.bs.sh" \
+            "${_em_script_dir:+$_em_script_dir/../sheme/bs.sh}" \
+            /usr/local/lib/sheme/bs.sh \
+            /opt/sheme/bs.sh; do
+        [[ -n "$_bs_candidate" && -f "$_bs_candidate" ]] || continue
+        _em_bs_candidates+=("$_bs_candidate")
+        [[ -z "$_em_bs_path" ]] && _em_bs_path="$_bs_candidate"
+    done
 
     # Find em.scm: prefer ~/.em.scm (user override), then alongside this script.
     local _em_scm_file
@@ -102,30 +56,52 @@ em() {
         return 1
     fi
 
-    # Load from cache if valid, otherwise evaluate Scheme and save cache.
+    # Load compiled cache, or compile from source.
+    # Cache file is the output of bs-compile — a plain bash script.
     local _em_cache_file="${_em_scm_file}.cache"
     if [[ -f "$_em_cache_file" \
           && "$_em_cache_file" -nt "$_em_scm_file" \
-          && ( ! -f "${_em_bs_path:-}" || "$_em_cache_file" -nt "$_em_bs_path" ) ]] \
-       && _em_load_cache "$_em_cache_file"; then
-        : # cached state restored
+          && ( -z "$_em_bs_path" || "$_em_cache_file" -nt "$_em_bs_path" ) ]] \
+       && source "$_em_cache_file" && type em_main &>/dev/null; then
+        : # compiled cache loaded
     else
+        # Need to compile: load interpreter + compiler
+        if (( ${#_em_bs_candidates[@]} == 0 )); then
+            echo "em: cannot find bs.sh — install sheme: https://github.com/jordanhubbard/sheme" >&2
+            return 1
+        fi
         if [[ ! -f "$_em_cache_file" ]]; then
             printf "em: Still working - first-time Scheme compile in progress.\n" >&2
             printf "em: This can take a while; future runs will use the cache and start much faster.\n" >&2
         else
             printf "em: Scheme cache is stale; rebuilding cache for this run.\n" >&2
         fi
-        bs "$(cat "$_em_scm_file")"
-        _em_save_cache "$_em_cache_file" "$_em_scm_file" 2>/dev/null || true
+        # Source a bs.sh that has bs-compile
+        local _em_compiled=""
+        for _bs_candidate in "${_em_bs_candidates[@]}"; do
+            # shellcheck source=/dev/null
+            source "$_bs_candidate"
+            type bs-compile &>/dev/null || continue
+            bs-reset
+            local _em_tmp="${_em_cache_file}.tmp.$$"
+            bs-compile "$(cat "$_em_scm_file")" > "$_em_tmp"
+            mv -f "$_em_tmp" "$_em_cache_file" 2>/dev/null || { rm -f "$_em_tmp"; }
+            _em_compiled=1
+            break
+        done
+        if [[ -z "$_em_compiled" ]]; then
+            echo "em: bs.sh found but bs-compile missing — update sheme: https://github.com/jordanhubbard/sheme" >&2
+            return 1
+        fi
+        source "$_em_cache_file"
     fi
 
     # Safety-net trap: restore terminal if killed unexpectedly
     local _em_saved_traps
     _em_saved_traps=$(trap -p INT TERM HUP 2>/dev/null)
-    trap 'printf "\e[0m\e[?25h\e[?1049l"; [[ -n "$__bs_stty_saved" ]] && stty "$__bs_stty_saved" 2>/dev/null; __bs_stty_saved=""; trap - INT TERM HUP; return 130' INT
-    trap 'printf "\e[0m\e[?25h\e[?1049l"; [[ -n "$__bs_stty_saved" ]] && stty "$__bs_stty_saved" 2>/dev/null; __bs_stty_saved=""; trap - INT TERM HUP; return 143' TERM
-    trap 'printf "\e[0m\e[?25h\e[?1049l"; [[ -n "$__bs_stty_saved" ]] && stty "$__bs_stty_saved" 2>/dev/null; __bs_stty_saved=""; trap - INT TERM HUP; return 129' HUP
+    trap 'printf "\e[0m\e[?25h\e[?1049l"; [[ -n "${__bsc_stty_saved:-}" ]] && stty "$__bsc_stty_saved" 2>/dev/null; __bsc_stty_saved=""; trap - INT TERM HUP; return 130' INT
+    trap 'printf "\e[0m\e[?25h\e[?1049l"; [[ -n "${__bsc_stty_saved:-}" ]] && stty "$__bsc_stty_saved" 2>/dev/null; __bsc_stty_saved=""; trap - INT TERM HUP; return 143' TERM
+    trap 'printf "\e[0m\e[?25h\e[?1049l"; [[ -n "${__bsc_stty_saved:-}" ]] && stty "$__bsc_stty_saved" 2>/dev/null; __bsc_stty_saved=""; trap - INT TERM HUP; return 129' HUP
 
     # Warn before loading very large files (>= 10MB)
     if [[ -n "${1:-}" && -f "$1" ]]; then
@@ -146,11 +122,8 @@ em() {
         fi
     fi
 
-    # Escape filename for Scheme and run the editor
-    local _em_escaped="${1:-}"
-    _em_escaped="${_em_escaped//\\/\\\\}"
-    _em_escaped="${_em_escaped//\"/\\\"}"
-    bs "(em-main \"$_em_escaped\")"
+    # Run the editor — em_main is a native bash function from the compiled cache
+    em_main "${1:-}"
 
     # Restore traps
     trap - INT TERM HUP
