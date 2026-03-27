@@ -231,7 +231,7 @@ em() {
         for ((i = pos; i < last; i++)); do
             _em_lines[i]="${_em_lines[i+1]}"
         done
-        _em_lines=("${_em_lines[@]:0:last}")
+        _em_lines=("${_em_lines[@]:0:$last}")
     }
 
     _em_delete_lines_at() {
