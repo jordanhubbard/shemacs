@@ -20,7 +20,7 @@
 
 set -uo pipefail
 
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || { echo "ERROR: cannot cd to repo root" >&2; exit 1; }
 
 VERIFY=0
 [[ "${1:-}" == "--verify" ]] && VERIFY=1
@@ -54,9 +54,14 @@ for ((i = 0; i < 200; i++)); do
 done
 
 visible_rows=$((_em_rows - 2))
-N=2000   # renders per measurement
+NUM_RENDERS=2000   # renders per measurement
 
 # ── baseline helpers ─────────────────────────────────────────────────────────
+# Note: the baseline and optimised helpers below deliberately duplicate the
+# before/after logic from em.sh _em_render() so that the benchmark measures
+# the two implementations head-to-head in a single process.  They are kept
+# in sync with the source manually; if the rendering logic changes, update
+# these accordingly so the benchmark remains meaningful.
 _em_expand_tabs_baseline() {
     local line="$1"
     if [[ "$line" != *$'\t'* ]]; then _em_expanded_line="$line"; return; fi
@@ -143,24 +148,24 @@ run_optimised() {
 }
 
 # ── run measurements ─────────────────────────────────────────────────────────
-echo "=== em render-loop benchmark (24×80 terminal, $N renders) ==="
+echo "=== em render-loop benchmark (24×80 terminal, $NUM_RENDERS renders) ==="
 echo ""
 
 t_start=$(date +%s%N)
-for ((k = 0; k < N; k++)); do run_baseline; done
+for ((k = 0; k < NUM_RENDERS; k++)); do run_baseline; done
 t_end=$(date +%s%N)
 ms_baseline=$(( (t_end - t_start) / 1000000 ))
-us_baseline=$(( ms_baseline * 1000 / N ))
+us_baseline=$(( ms_baseline * 1000 / NUM_RENDERS ))
 printf "  baseline  (printf padding + function call): %5d ms / %d = %d µs/render\n" \
-    "$ms_baseline" "$N" "$us_baseline"
+    "$ms_baseline" "$NUM_RENDERS" "$us_baseline"
 
 t_start=$(date +%s%N)
-for ((k = 0; k < N; k++)); do run_optimised; done
+for ((k = 0; k < NUM_RENDERS; k++)); do run_optimised; done
 t_end=$(date +%s%N)
 ms_opt=$(( (t_end - t_start) / 1000000 ))
-us_opt=$(( ms_opt * 1000 / N ))
+us_opt=$(( ms_opt * 1000 / NUM_RENDERS ))
 printf "  optimised (spaces cache  + inline expand):  %5d ms / %d = %d µs/render\n" \
-    "$ms_opt" "$N" "$us_opt"
+    "$ms_opt" "$NUM_RENDERS" "$us_opt"
 
 echo ""
 if ((us_baseline > 0)); then
