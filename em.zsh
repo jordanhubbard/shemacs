@@ -103,6 +103,8 @@ em() {
     local -i _em_cur_buf=0
     local -i _em_buf_count=0
     local -i _em_left=0
+    local _em_spaces=""          # 256 spaces — fast padding without printf
+    local _em_dashes=""          # 256 dashes — fast status-bar padding
 
     # ===== INNER FUNCTIONS =====
 
@@ -181,6 +183,8 @@ em() {
         trap '_em_handle_resize' WINCH
         printf '%s' "${ESC}[?1049h${ESC}[?25h"
         _em_handle_resize
+        printf -v _em_spaces '%*s' 256 ''
+        _em_dashes="${_em_spaces// /-}"
         _em_message="em: shemacs [zsh] (C-x C-c to quit, C-h b for help)"
         # Detect system clipboard tool
         if command -v pbcopy >/dev/null 2>&1; then
@@ -351,9 +355,7 @@ em() {
             ch="${line: i:1}"
             if [[ "$ch" == $'\t' ]]; then
                 local -i spaces=$((_em_tab_width - (col % _em_tab_width)))
-                local pad=""
-                printf -v pad '%*s' "$spaces" ''
-                result+="$pad"
+                result+="${_em_spaces:0:spaces}"
                 ((col += spaces))
             else
                 result+="$ch"
@@ -405,16 +407,32 @@ em() {
             output+="${ESC}[${screen_row};1H"
             if ((i < ${#_em_lines[@]})); then
                 local line="${_em_lines[i]}"
-                _em_expand_tabs "$line"
-                local full_display="${_em_expanded_line}"
+                # Inline tab expansion (avoids function-call overhead per line)
+                local full_display
+                if [[ "$line" == *$'\t'* ]]; then
+                    full_display=""
+                    local _et_i _et_ch _et_col=0 _et_spaces
+                    local -i _et_len=${#line}
+                    for ((_et_i = 0; _et_i < _et_len; _et_i++)); do
+                        _et_ch="${line: _et_i:1}"
+                        if [[ "$_et_ch" == $'\t' ]]; then
+                            _et_spaces=$((_em_tab_width - (_et_col % _em_tab_width)))
+                            full_display+="${_em_spaces:0:_et_spaces}"
+                            ((_et_col += _et_spaces))
+                        else
+                            full_display+="$_et_ch"
+                            ((_et_col++))
+                        fi
+                    done
+                else
+                    full_display="$line"
+                fi
                 # Apply horizontal scroll offset
                 local display="${full_display: _em_left: _em_cols}"
                 # Pad to full width to avoid ESC[K flicker
                 local -i dlen=${#display}
                 if ((dlen < _em_cols)); then
-                    local pad=""
-                    printf -v pad '%*s' "$((_em_cols - dlen))" ''
-                    display+="$pad"
+                    display+="${_em_spaces:0:_em_cols - dlen}"
                 fi
                 # Isearch match highlighting (takes priority over region)
                 if ((_em_isearch_active && _em_isearch_y >= 0 && i == _em_isearch_y)); then
@@ -479,9 +497,7 @@ em() {
             "-UUU:" "$mod_flag" "-" "$_em_bufname" "$((_em_cy + 1))" "$pct"
         local -i slen=${#sline}
         if ((slen < _em_cols)); then
-            local spad=""
-            printf -v spad '%*s' "$((_em_cols - slen))" ''
-            sline+="${spad// /-}"
+            sline+="${_em_dashes:0:_em_cols - slen}"
         fi
         sline="${sline:0: _em_cols}"
         output+="${ESC}[${status_row};1H${ESC}[7m${sline}${ESC}[0m"
