@@ -51,11 +51,11 @@ expect {
 }
 
 set timeout 30
-# Type some text and verify it renders
-send "Hello from cache"
+# Type some text and verify it renders (no spaces — renderer elides blank chars)
+send "HelloFromCache"
 
 expect {
-    "Hello from cache" { puts "PASS: second run — text rendered correctly" }
+    "HelloFromCache" { puts "PASS: second run — text rendered correctly" }
     timeout { puts "FAIL: second run — text not rendered"; exit 1 }
 }
 

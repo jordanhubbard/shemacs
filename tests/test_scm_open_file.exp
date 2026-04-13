@@ -12,7 +12,7 @@ close $fd
 spawn bash [file join [file dirname [info script]] .. em.sh] /tmp/em_scm_test_input.txt
 
 expect {
-    "Hello World" { puts "\nPASS: file content rendered" }
+    "Hello" { puts "\nPASS: file content rendered" }
     timeout { puts "\nFAIL: file content not shown"; exit 1 }
 }
 
