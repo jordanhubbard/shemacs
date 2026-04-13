@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-04-12
+
+### Added
+- retire native shell implementations; sheme is now the only backend
+
+
 ### Changed
 - Retire native bash (`em.sh`) and zsh (`em.zsh`) implementations; sheme is now a mandatory dependency
 - `em.sh` and `em.zsh` are now the Scheme AOT launchers (previously `em.scm.sh` / `em.scm.zsh`)
