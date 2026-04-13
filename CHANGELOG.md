@@ -5,6 +5,15 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-04-13
+
+### Added
+- retire native shell implementations; sheme is now the only backend
+
+### Fixed
+- use space-free patterns in expect tests
+
+
 ## [1.1.1] - 2026-04-12
 
 ### Added
