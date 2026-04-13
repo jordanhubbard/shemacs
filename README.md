@@ -1,24 +1,17 @@
 # em
 
 shemacs — an Emacs/mg-compatible editor implemented as a single shell
-function. No compiled languages, no dependencies beyond a standard
-Linux/macOS install -- just bash (or zsh) and `/usr/bin`.
+function. The editor logic is written in pure Scheme (`em.scm`) and
+AOT-compiled to native bash or zsh via [sheme](https://github.com/jordanhubbard/sheme).
 
 Features include multiple buffers, undo, a 60-entry kill ring, incremental
 search, query replace, keyboard macros, region highlighting, fill paragraph,
-and universal argument -- all in ~2750 lines of pure shell script.
+and universal argument.
 
-Three implementations are included:
-
-- **`em.sh`** — bash implementation (the original)
-- **`em.zsh`** — zsh implementation (zsh-native glob syntax for file completion)
-- **`em.scm`** — Scheme implementation, launched via `em.scm.sh`; requires [sheme](https://github.com/jordanhubbard/sheme)
+**Requires [sheme](https://github.com/jordanhubbard/sheme)** (`bs.sh`) to be
+installed. Install sheme first, then install shemacs.
 
 ## Install
-
-### Quick Setup (source from .bashrc / .zshrc)
-
-Clone the repo and use `make install`:
 
 ```bash
 git clone https://github.com/jordanhubbard/shemacs.git ~/em
@@ -26,31 +19,54 @@ cd ~/em
 make install
 ```
 
-This installs the plain shell editor by default: it copies `em.sh` and
-`em.zsh` to your home directory and adds `source` lines to both
-`~/.bashrc` and `~/.zshrc`.
+`make install` automatically fetches and installs
+[sheme](https://github.com/jordanhubbard/sheme) if it is not already
+present — no manual pre-install step required. It then copies `em.sh`,
+`em.zsh`, and `em.scm` to your home directory and adds `source` lines to
+both `~/.bashrc` and `~/.zshrc`.
 
-Now reload your shell and `em` is available as a command:
+Reload your shell and `em` is available:
 
 ```bash
-source ~/.bashrc       # reload in current shell, or just open a new terminal
+source ~/.bashrc       # or open a new terminal
 em myfile.txt          # edit a file
 em                     # open a *scratch* buffer
 ```
 
-Because `em` is a shell function (not a subprocess), it starts
-instantly -- there is no fork/exec overhead.
+Because `em` is a shell function (not a subprocess), after the first-run
+compile it starts instantly — there is no fork/exec overhead.
 
-### Using the Makefile
+### Makefile targets
 
 ```bash
-make install           # copy em.sh/em.zsh to ~/ and add source lines to rc files
-make install-scm       # optional: add sheme-backed Scheme backend for bash (slower startup)
+make install           # install shemacs (auto-installs sheme if needed)
+make install-sheme     # install sheme only (bs.sh → ~/.bs.sh)
 make uninstall         # remove copied files and source lines
-make uninstall-scm     # remove only Scheme backend files/source line
-make check             # syntax-check bash and zsh versions
-make test              # run integration tests
-make example           # run bash/zsh smoke examples
+make check             # syntax-check the launchers
+make test              # run integration tests (requires expect and sheme)
+make example           # run smoke example (requires expect and sheme)
+```
+
+### Standalone (no sourcing)
+
+The launcher also works as a plain executable:
+
+```bash
+chmod +x em.sh
+./em.sh myfile.txt
+```
+
+### First-run compile
+
+On first run, `em.sh` / `em.zsh` compile `em.scm` to a native shell cache
+(`em.scm.cache` for bash, `em.scm.zsh.cache` for zsh). This takes a moment.
+Subsequent runs source the cache directly and start instantly.
+
+If the editor behaves unexpectedly after updating sheme or em.scm, delete
+the cache to force a rebuild:
+
+```bash
+rm -f ~/.em.scm.cache ~/.em.scm.zsh.cache
 ```
 
 ## Contributor Pre-Push Checks
@@ -61,69 +77,6 @@ Before every push, run and pass these targets from both bash and zsh shells:
 make test
 make example
 ```
-
-### Standalone (no sourcing)
-
-It also works as a plain executable if you just want to run it without
-adding anything to your rc files:
-
-```bash
-chmod +x em.sh
-./em.sh myfile.txt
-```
-
-In this mode it runs as a script in a subshell rather than a shell
-function, but the behavior is identical.
-
-## Scheme Implementation
-
-`em.scm` is the editor rewritten in ~1300 lines of pure Scheme. It is
-shell-neutral: all terminal I/O, key reading, and file operations go
-through [sheme](https://github.com/jordanhubbard/sheme)'s built-in
-primitives, so the Scheme source itself contains no bash- or zsh-specific
-code.
-
-**Caveat:** The Scheme version may have a slow initial startup time (several seconds)
-due to the overhead of parsing and caching the Scheme code in a shell environment.
-Subsequent runs are faster but still slower than the pure bash/zsh versions.
-
-`em.scm.sh` is the thin launcher that sources the sheme interpreter,
-loads `em.scm`, and calls `(em-main)`.
-
-### Installing the Scheme backend
-
-`em.scm` requires **sheme v1.0.0 or later**.  It uses the terminal I/O
-builtins introduced in that release: `read-byte`, `write-stdout`,
-`terminal-raw!`, `terminal-restore!`, `terminal-size`, `terminal-suspend!`,
-`file-read`, `file-write-atomic`, `file-glob`, `file-directory?`,
-`eval-string`, and `shell-capture`.
-
-1. Install [sheme](https://github.com/jordanhubbard/sheme) (`bs.sh`):
-
-   ```bash
-   git clone https://github.com/jordanhubbard/sheme.git ~/sheme
-   cd ~/sheme && make install
-   ```
-
-2. Optionally install the Scheme backend into your bash startup:
-
-   ```bash
-   cd /path/to/shemacs
-   make install-scm
-   source ~/.bashrc
-   em myfile.txt
-   ```
-
-3. Or run/source `em.scm.sh` directly:
-
-   ```bash
-   # Run standalone
-   bash em.scm.sh myfile.txt
-
-   # Or add to ~/.bashrc for instant startup as a shell function
-   source /path/to/shemacs/em.scm.sh
-   em myfile.txt
-   ```
 
 ## Keybindings
 
@@ -215,13 +168,15 @@ builtins introduced in that release: `read-byte`, `write-stdout`,
 `goto-line`, `what-line`, `query-replace`, `what-cursor-position`,
 `save-buffer`, `find-file`, `write-file`, `insert-file`, `kill-buffer`,
 `switch-to-buffer`, `list-buffers`, `set-fill-column`,
-`describe-bindings`, `save-buffers-kill-emacs`
+`describe-bindings`, `save-buffers-kill-emacs`, `eval-buffer`
 
 ## Why?
 
-Because every Linux and macOS box has bash or zsh, and sometimes you
-just need a quick editor that feels like emacs without installing
-anything.
+Because sometimes you just need a quick editor that feels like Emacs
+without installing Emacs.  shemacs is small (~1300 lines of Scheme),
+its dependencies are minimal (just sheme and a standard shell), and
+once compiled it starts instantly as a shell function with no fork/exec
+overhead.
 
 ## The Totally True and Not At All Embellished History of shemacs
 

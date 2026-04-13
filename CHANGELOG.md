@@ -5,6 +5,12 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+### Changed
+- Retire native bash (`em.sh`) and zsh (`em.zsh`) implementations; sheme is now a mandatory dependency
+- `em.sh` and `em.zsh` are now the Scheme AOT launchers (previously `em.scm.sh` / `em.scm.zsh`)
+- `em-scm()` function renamed to `em()` in zsh launcher; include guards updated
+- Tests and Makefile updated to reflect single Scheme implementation
+
 ## [1.1.0] - 2026-04-12
 
 ### Added

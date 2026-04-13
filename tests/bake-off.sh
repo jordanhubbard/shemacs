@@ -1,12 +1,10 @@
 #!/usr/bin/env bash
-# tests/bake-off.sh — 4-quadrant shemacs performance bake-off vs mg
+# tests/bake-off.sh — shemacs performance bake-off vs mg
 #
 # Measures startup latency and per-keystroke latency for:
-#   0. mg             — C binary reference (micrognuemacs)
-#   1. em.sh          — native bash
-#   2. em.zsh         — native zsh
-#   3. em.scm.sh      — Scheme AOT-compiled → bash  (em.scm.cache)
-#   4. em.scm.zsh     — Scheme AOT-compiled → zsh   (em.scm.zsh.cache)
+#   0. mg        — C binary reference (micrognuemacs)
+#   1. em.sh     — Scheme AOT-compiled → bash  (em.scm.cache)
+#   2. em.zsh    — Scheme AOT-compiled → zsh   (em.scm.zsh.cache)
 #
 # Benchmarks:
 #   A. Startup    — time from spawn to first render → quit
@@ -135,20 +133,8 @@ V_SHELL[mg_ref]="none"
 V_CACHE[mg_ref]=""
 V_PAT[mg_ref]="$ANSI_PAT"
 
-V_LABEL[bash_native]="em.sh             native bash"
-V_SPAWN[bash_native]="bash --norc --noprofile ./em.sh"
-V_SHELL[bash_native]="bash"
-V_CACHE[bash_native]=""
-V_PAT[bash_native]="$ANSI_PAT"
-
-V_LABEL[zsh_native]="em.zsh            native zsh"
-V_SPAWN[zsh_native]="zsh -f ./em.zsh"
-V_SHELL[zsh_native]="zsh"
-V_CACHE[zsh_native]=""
-V_PAT[zsh_native]="$ANSI_PAT"
-
-V_LABEL[bash_aot]="em.scm.sh         AOT bash (sheme)"
-# Source local cache directly — bypasses em.scm.sh's HOME-based cache lookup
+V_LABEL[bash_aot]="em.sh              AOT bash (sheme)"
+# Source local cache directly — bypasses em.sh's HOME-based cache lookup
 # so the benchmark always tests the cache in this project directory.
 # Tcl {}-quoting passes the -c argument as a single word to bash.
 V_SPAWN[bash_aot]="bash --norc --noprofile -c {source ./em.scm.cache; em_main}"
@@ -156,20 +142,20 @@ V_SHELL[bash_aot]="bash"
 V_CACHE[bash_aot]="em.scm.cache"
 V_PAT[bash_aot]="$ANSI_PAT"
 
-V_LABEL[zsh_aot]="em.scm.zsh        AOT zsh  (sheme)"
-# Source local cache directly — em.scm.zsh launchers uses ~/.em.scm path which
-# resolves the cache to ~/.em.scm.zsh.cache (may not exist).  Tcl {}-quoting
-# passes the -c argument as a single word to zsh.
+V_LABEL[zsh_aot]="em.zsh             AOT zsh  (sheme)"
+# Source local cache directly — em.zsh uses ~/.em.scm path which resolves
+# the cache to ~/.em.scm.zsh.cache (may not exist).  Tcl {}-quoting passes
+# the -c argument as a single word to zsh.
 V_SPAWN[zsh_aot]="zsh -f -c {source ./em.scm.zsh.cache; em_main}"
 V_SHELL[zsh_aot]="zsh"
 V_CACHE[zsh_aot]="em.scm.zsh.cache"
 V_PAT[zsh_aot]="$ANSI_PAT"
 
-VARIANTS=(mg_ref bash_native zsh_native bash_aot zsh_aot)
+VARIANTS=(mg_ref bash_aot zsh_aot)
 
 # ── preflight ─────────────────────────────────────────────────────────────────
 
-echo "=== shemacs 4-Quadrant Performance Bake-Off vs mg ==="
+echo "=== shemacs Performance Bake-Off vs mg ==="
 echo "  Trials per measurement: $TRIALS"
 echo "  Keystroke sample size:  $TYPE_N self-inserts"
 echo "  Harness:                vwait (event-loop) — no TCSADRAIN stalls"
@@ -251,11 +237,11 @@ for v in "${VARIANTS[@]}"; do
 done
 echo ""
 
-# ── benchmark C: render µbench (shell compiled variants only) ─────────────────
+# ── benchmark C: render µbench (compiled shell variants only) ─────────────────
 
 echo "──────────────────────────────────────────────────────────"
 echo "C. RENDER MICRO-BENCHMARK  (direct em_render() call)"
-echo "   Shell-compiled variants only — N=500 renders, 24×80"
+echo "   N=500 renders, 24×80"
 echo "──────────────────────────────────────────────────────────"
 printf "  %-44s  %8s  %10s\n" "Variant" "Total ms" "µs/render"
 printf "  %-44s  %8s  %10s\n" "-------------------------------------------" "--------" "----------"
@@ -311,7 +297,7 @@ _bench_render_variant() {
     printf "  %-44s  %8d ms  %8d µs\n" "${V_LABEL[$v]}" "$total" "$us_render"
 }
 
-for v in bash_native zsh_native bash_aot zsh_aot; do
+for v in bash_aot zsh_aot; do
     [[ -z "${V_SPAWN[$v]:-}" ]] && continue
     _bench_render_variant "$v"
 done
@@ -339,7 +325,7 @@ echo ""
 mg_key=${KEY_US_NET[mg_ref]:-0}
 if (( mg_key > 0 )); then
     echo "Ratio vs mg (lower is better):"
-    for v in bash_native zsh_native bash_aot zsh_aot; do
+    for v in bash_aot zsh_aot; do
         [[ -z "${V_SPAWN[$v]:-}" ]] && continue
         v_key=${KEY_US_NET[$v]:-0}
         if (( v_key > 0 && mg_key > 0 )); then

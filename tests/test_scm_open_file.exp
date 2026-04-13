@@ -9,7 +9,7 @@ puts $fd "Second Line"
 puts $fd "Third Line"
 close $fd
 
-spawn bash [file join [file dirname [info script]] .. em.scm.sh] /tmp/em_scm_test_input.txt
+spawn bash [file join [file dirname [info script]] .. em.sh] /tmp/em_scm_test_input.txt
 
 expect {
     "Hello World" { puts "\nPASS: file content rendered" }

@@ -2,7 +2,7 @@
 # Test: I-search highlights match in Scheme editor
 set timeout 300 ; # Scheme startup (bs loads ~1300 lines) is slow on CI
 
-spawn bash [file join [file dirname [info script]] .. em.scm.sh]
+spawn bash [file join [file dirname [info script]] .. em.sh]
 
 expect {
     "shemacs" { puts "\nPASS: editor started" }

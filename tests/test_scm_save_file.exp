@@ -5,7 +5,7 @@ set timeout 300 ; # Scheme startup (bs loads ~1300 lines) is slow on CI
 set testfile "/tmp/em_scm_test_save_output.txt"
 file delete -force $testfile
 
-spawn bash [file join [file dirname [info script]] .. em.scm.sh] $testfile
+spawn bash [file join [file dirname [info script]] .. em.sh] $testfile
 
 expect {
     "shemacs" { puts "\nPASS: editor started" }
