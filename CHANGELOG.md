@@ -5,6 +5,20 @@ Format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-04-12
+
+### Added
+- add include guards to prevent redundant re-sourcing
+- add zsh sheme backend + render optimisation + bake-off harness
+
+### Fixed
+- add $ prefix to $last in KSH_ARRAYS slice expression
+
+### Other
+- perf: inline expand_tabs and pre-compute padding strings in render loop
+- perf: fix benchmark script issues from code review
+
+
 ## [1.0.8] - 2026-03-05
 
 ### Added
