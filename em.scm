@@ -27,7 +27,7 @@
 ;; M-v / PGUP    Page up                M-x         Extended command
 ;; C-l           Recenter               C-g         Cancel
 ;; C-z           Suspend                C-h b       Describe bindings
-;;                                      C-j         Eval buffer (Scheme)
+;;                                      M-x eval-buffer  Eval buffer (Scheme)
 ;;
 ;; RECTANGLES (C-x r)                   MACROS (C-x)
 ;; C-x r k   Kill rectangle             C-x (       Start macro
@@ -293,18 +293,24 @@
 
 ;; ===== Render =====
 (define (em-render)
+  ;; Use string accumulator (string-append) instead of cons+reverse.
+  ;; The AOT compiler compiles (set! output (string-append output s)) to
+  ;; output="${output}${s}" which is O(n), vs cons+reverse which compiles
+  ;; to O(n²) array rebuilds in bash.  Inline (string-append ESC ...) at
+  ;; each call site so the compiler emits "${ESC}[..." directly without
+  ;; a function call to ansi().
   (let* ((visible (- em-rows 2))
-         (parts '()))
-    (define (emit s) (set! parts (cons s parts)))
+         (output ""))
+    (define (emit s) (set! output (string-append output s)))
 
     ;; Hide cursor during redraw
-    (emit (ansi "[?25l"))
+    (emit (string-append ESC "[?25l"))
 
     ;; Render each visible line
     (let loop ((screen-row 1))
       (when (<= screen-row visible)
         (let ((buf-row (+ em-top (- screen-row 1))))
-          (emit (ansi "[" (number->string screen-row) ";1H"))
+          (emit (string-append ESC "[" (number->string screen-row) ";1H"))
           (if (< buf-row em-nlines)
               (let* ((line (vector-ref-safe em-lines buf-row))
                      (display (expand-tabs line))
@@ -331,9 +337,9 @@
                       (if (< mhs mhe)
                           (begin
                             (emit (substr display 0 mhs))
-                            (emit (ansi "[1;7m"))
+                            (emit (string-append ESC "[1;7m"))
                             (emit (substr display mhs mhe))
-                            (emit (ansi "[0m"))
+                            (emit (string-append ESC "[0m"))
                             (emit (substr display mhe (string-length display))))
                           (emit display)))
                     ;; Region highlight
@@ -353,14 +359,14 @@
                           (if (< hs he)
                               (begin
                                 (emit (substr display 0 hs))
-                                (emit (ansi "[7m"))
+                                (emit (string-append ESC "[7m"))
                                 (emit (substr display hs he))
-                                (emit (ansi "[0m"))
+                                (emit (string-append ESC "[0m"))
                                 (emit (substr display he (string-length display))))
                               (emit display)))
                         (emit display))))
               ;; Past end of buffer — clear line
-              (emit (ansi "[K")))
+              (emit (string-append ESC "[K")))
           (loop (+ screen-row 1)))))
 
     ;; Status line (mode line)
@@ -383,15 +389,15 @@
            (status (if (< slen em-cols)
                        (string-append status (string-repeat "-" (- em-cols slen)))
                        (substr status 0 em-cols))))
-      (emit (ansi "[" (number->string status-row) ";1H"))
-      (emit (ansi "[7m"))
+      (emit (string-append ESC "[" (number->string status-row) ";1H"))
+      (emit (string-append ESC "[7m"))
       (emit status)
-      (emit (ansi "[0m")))
+      (emit (string-append ESC "[0m")))
 
     ;; Echo / message line
     (let ((msg-row em-rows))
-      (emit (ansi "[" (number->string msg-row) ";1H"))
-      (emit (ansi "[K"))
+      (emit (string-append ESC "[" (number->string msg-row) ";1H"))
+      (emit (string-append ESC "[K"))
       (cond
         ((equal? em-mode "isearch")
          (let ((prompt (if (= em-isearch-dir 1) "I-search: " "I-search backward: ")))
@@ -411,12 +417,12 @@
              ((equal? em-mode "minibuffer")
               (+ (string-length em-mb-prompt) (string-length em-mb-input) 1))
              (#t (+ (- disp-cx em-left) 1)))))
-      (emit (ansi "[" (number->string screen-cy) ";" (number->string (max 1 screen-cx)) "H")))
+      (emit (string-append ESC "[" (number->string screen-cy) ";" (number->string (max 1 screen-cx)) "H")))
 
     ;; Show cursor
-    (emit (ansi "[?25h"))
+    (emit (string-append ESC "[?25h"))
 
-    (write-stdout (apply string-append (reverse parts)))))
+    (write-stdout output)))
 
 ;; ===== Movement =====
 (define (em-forward-char)
@@ -637,14 +643,16 @@
         (let ((killed (substr line em-cx line-len)))
           (em-undo-push (list "replace_line" em-cy em-cx line))
           (vector-set! em-lines em-cy (substr line 0 em-cx))
-          (em-kill-push killed))
+          (em-kill-push killed)
+          (em-clipboard-copy (car em-kill-ring)))
         (when (< em-cy (- em-nlines 1))
           (let ((next (vector-ref-safe em-lines (+ em-cy 1))))
             (em-undo-push (list "join_lines" em-cy em-cx))
             (vector-set! em-lines em-cy (string-append line next))
             (set! em-lines (vector-remove em-lines (+ em-cy 1)))
             (set! em-nlines (- em-nlines 1))
-            (em-kill-push "\n"))))
+            (em-kill-push "\n")
+            (em-clipboard-copy (car em-kill-ring)))))
     (set! em-modified 1) (set! em-goal-col -1)))
 
 (define (em-yank)
@@ -802,6 +810,13 @@
               (vector-set! em-lines i
                 (string-append (substr line 0 rsx) (substr line rex ll))))
             (loop (+ i 1))))
+        (em-clipboard-copy (apply string-append
+                              (let loop ((rs em-rect-ring) (acc '()))
+                                (if (null? rs) (reverse acc)
+                                    (loop (cdr rs)
+                                          (cons (if (null? acc) (car rs)
+                                                    (string-append "\n" (car rs)))
+                                                acc))))))
         (set! em-cy sy) (set! em-cx sx)
         (set! em-mark-y -1) (set! em-mark-x -1)
         (set! em-modified 1)
@@ -848,6 +863,13 @@
                    (rsx (min sx ll)) (rex (min ex ll)))
               (set! em-rect-ring (append em-rect-ring (list (substr line rsx rex)))))
             (loop (+ i 1))))
+        (em-clipboard-copy (apply string-append
+                              (let loop ((rs em-rect-ring) (acc '()))
+                                (if (null? rs) (reverse acc)
+                                    (loop (cdr rs)
+                                          (cons (if (null? acc) (car rs)
+                                                    (string-append "\n" (car rs)))
+                                                acc))))))
         (set! em-message "Rectangle copied"))))
 
 (define (em-delete-rectangle)
@@ -859,14 +881,23 @@
              (saved-lines (em-lines-list sy ey))
              (n (+ (- ey sy) 1)))
         (em-undo-push (list "replace_region" sy n sy sx saved-lines))
-        (let loop ((i sy))
-          (when (<= i ey)
-            (let* ((line (vector-ref-safe em-lines i))
-                   (ll (string-length line))
-                   (rsx (min sx ll)) (rex (min ex ll)))
-              (vector-set! em-lines i
-                (string-append (substr line 0 rsx) (substr line rex ll))))
-            (loop (+ i 1))))
+        (let* ((deleted-rows '()))
+          (let loop ((i sy))
+            (when (<= i ey)
+              (let* ((line (vector-ref-safe em-lines i))
+                     (ll (string-length line))
+                     (rsx (min sx ll)) (rex (min ex ll)))
+                (set! deleted-rows (append deleted-rows (list (substr line rsx rex))))
+                (vector-set! em-lines i
+                  (string-append (substr line 0 rsx) (substr line rex ll))))
+              (loop (+ i 1))))
+          (em-clipboard-copy (apply string-append
+                                (let loop ((rs deleted-rows) (acc '()))
+                                  (if (null? rs) (reverse acc)
+                                      (loop (cdr rs)
+                                            (cons (if (null? acc) (car rs)
+                                                      (string-append "\n" (car rs)))
+                                                  acc)))))))
         (set! em-cy sy) (set! em-cx sx)
         (set! em-mark-y -1) (set! em-mark-x -1)
         (set! em-modified 1)
@@ -985,6 +1016,7 @@
              (saved-lines (em-lines-list sy ey)))
         (em-undo-push (list "replace_region" sy 1 sy sx saved-lines))
         (set! em-kill-ring (cons killed em-kill-ring))
+        (em-clipboard-copy killed)
         (em-delete-region sy sx ey ex)
         (set! em-cy sy) (set! em-cx sx)
         (set! em-modified 1) (set! em-goal-col -1) (em-ensure-visible)))))
@@ -998,6 +1030,7 @@
              (saved-lines (em-lines-list sy ey)))
         (em-undo-push (list "replace_region" sy 1 sy sx saved-lines))
         (set! em-kill-ring (cons killed em-kill-ring))
+        (em-clipboard-copy killed)
         (em-delete-region sy sx ey ex)
         (set! em-modified 1) (set! em-goal-col -1) (em-ensure-visible)))))
 
@@ -1268,7 +1301,9 @@
              (em-minibuffer-start "Switch to buffer: " "switch-buffer"))
             ((equal? result "list-buffers")
              (em-list-buffers))
-            ((equal? result "describe-bindings")
+            ((equal? result "save-buffers-kill-emacs")
+             (em-do-quit))
+            ((or (equal? result "describe-bindings") (equal? result "help"))
              (em-show-bindings))
             ((equal? result "clipboard-yank")
              (let ((clip (em-clipboard-paste)))
@@ -1362,7 +1397,8 @@
   '("goto-line" "what-line" "set-fill-column" "query-replace"
     "save-buffer" "find-file" "write-file" "insert-file"
     "kill-buffer" "switch-to-buffer" "list-buffers"
-    "describe-bindings" "clipboard-yank" "what-cursor-position" "eval-buffer"))
+    "save-buffers-kill-emacs" "describe-bindings" "help"
+    "clipboard-yank" "what-cursor-position" "eval-buffer"))
 
 (define (em-complete-command input)
   (let ((matches (filter (lambda (cmd)
@@ -1542,7 +1578,7 @@
     "M-v / PGUP    Page up                M-x         Extended command"
     "C-l           Recenter               C-g         Cancel"
     "C-z           Suspend                C-h b       Describe bindings"
-    "                                     C-j         Eval buffer (Scheme)"
+    "                                     M-x eval-buffer  Eval buffer (Scheme)"
     ""
     "RECTANGLES (C-x r)                   MACROS (C-x)"
     "C-x r k   Kill rectangle             C-x (       Start macro"
@@ -2012,7 +2048,7 @@
     ((equal? key "C-r")  (em-isearch-start -1))
     ((equal? key "C-o")  (em-open-line))
     ((equal? key "C-m")  (em-newline))
-    ((equal? key "C-j")  (em-eval-buffer))
+    ((equal? key "C-j")  (em-newline))
     ((equal? key "C-t")  (em-transpose-chars))
     ((equal? key "C-_")  (em-undo))
     ((equal? key "C-z")  (em-suspend))
@@ -2238,13 +2274,13 @@
           (set! em-message (string-append "(New file) " filename))
           (set! em-msg-persist 1))))
   (em-render)
-  ;; Main loop
+  ;; Main loop — use cached em-rows/em-cols (set by em-init and resize handler)
+  ;; to avoid calling terminal-size (which forks tput) on every keypress.
   (let loop ()
     (when em-running
-      (let* ((size (terminal-size))
-             (key (em-read-key)))
+      (let* ((key (em-read-key)))
         (unless (equal? key "QUIT")
-          (em-handle-key key (car size) (cdr size))
+          (em-handle-key key em-rows em-cols)
           (loop)))))
   ;; Cleanup
   (write-stdout (string-append ESC "[0m" ESC "[?25h" ESC "[?1049l"))

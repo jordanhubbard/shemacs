@@ -40,9 +40,10 @@ install: ## Install shell versions (bash + zsh) to home directory
 	fi
 	@echo "Installed shell versions. Open a new shell or source your rc file."
 
-install-scm: install ## Install optional sheme-backed editor (bash, slower startup)
+install-scm: install ## Install optional sheme-backed editor (bash + zsh, slower startup)
 	@echo "Installing shemacs Scheme backend..."
-	@cp "$(SRCDIR)/em.scm.sh" "$(HOME)/.em.scm.sh"
+	@cp "$(SRCDIR)/em.scm.sh"  "$(HOME)/.em.scm.sh"
+	@cp "$(SRCDIR)/em.scm.zsh" "$(HOME)/.em.scm.zsh"
 	@if ! cmp -s "$(SRCDIR)/em.scm" "$(HOME)/.em.scm" 2>/dev/null; then \
 		cp "$(SRCDIR)/em.scm" "$(HOME)/.em.scm"; \
 		echo "  Updated ~/.em.scm"; \
@@ -65,30 +66,43 @@ install-scm: install ## Install optional sheme-backed editor (bash, slower start
 	else \
 		echo "~/.bashrc already sources ~/.em.scm.sh"; \
 	fi
-	@echo "Installed Scheme backend. Reload ~/.bashrc to use Scheme em() in bash."
+	@if ! grep -q '\[.*\.em\.scm\.zsh.*\] && source' "$(HOME)/.zshrc" 2>/dev/null; then \
+		if ! grep -q '# shemacs-scm install marker' "$(HOME)/.zshrc" 2>/dev/null; then \
+			echo '' >> "$(HOME)/.zshrc"; \
+			echo '# shemacs-scm install marker' >> "$(HOME)/.zshrc"; \
+		fi; \
+		echo '[[ -f "$$HOME/.em.scm.zsh" ]] && source "$$HOME/.em.scm.zsh"' >> "$(HOME)/.zshrc"; \
+		echo "Added Scheme zsh source line to ~/.zshrc"; \
+	else \
+		echo "~/.zshrc already sources ~/.em.scm.zsh"; \
+	fi
+	@echo "Installed Scheme backend. Reload rc files to use em-scm()."
 
 uninstall: ## Remove shemacs from home directory
 	@rm -f "$(HOME)/.em.sh" "$(HOME)/.em.zsh"
-	@rm -f "$(HOME)/.em.scm.sh" "$(HOME)/.em.scm" "$(HOME)/.em.scm.cache"
+	@rm -f "$(HOME)/.em.scm.sh" "$(HOME)/.em.scm.zsh" "$(HOME)/.em.scm" "$(HOME)/.em.scm.cache" "$(HOME)/.em.scm.zsh.state"
 	@[ -f "$(HOME)/.bashrc" ] && sed -i '' '/# shemacs install marker/d; /# shemacs-scm install marker/d; /# em - bad emacs/d; /# em - shemacs/d; /source.*\.em\.sh/d; /sourceif.*\.em\.sh/d; /\[.*\.em\.sh.*\] && source/d; /source.*\.em\.scm\.sh/d; /sourceif.*\.em\.scm\.sh/d; /\[.*\.em\.scm\.sh.*\] && source/d' "$(HOME)/.bashrc" 2>/dev/null || \
 		sed -i '/# shemacs install marker/d; /# shemacs-scm install marker/d; /# em - bad emacs/d; /# em - shemacs/d; /source.*\.em\.sh/d; /sourceif.*\.em\.sh/d; /\[.*\.em\.sh.*\] && source/d; /source.*\.em\.scm\.sh/d; /sourceif.*\.em\.scm\.sh/d; /\[.*\.em\.scm\.sh.*\] && source/d' "$(HOME)/.bashrc" 2>/dev/null || true
-	@[ -f "$(HOME)/.zshrc" ] && sed -i '' '/# shemacs install marker/d; /# shemacs-scm install marker/d; /# em - bad emacs/d; /# em - shemacs/d; /source.*\.em\.zsh/d; /sourceif.*\.em\.zsh/d; /\[.*\.em\.zsh.*\] && source/d' "$(HOME)/.zshrc" 2>/dev/null || \
-		sed -i '/# shemacs install marker/d; /# shemacs-scm install marker/d; /# em - bad emacs/d; /# em - shemacs/d; /source.*\.em\.zsh/d; /sourceif.*\.em\.zsh/d; /\[.*\.em\.zsh.*\] && source/d' "$(HOME)/.zshrc" 2>/dev/null || true
+	@[ -f "$(HOME)/.zshrc" ] && sed -i '' '/# shemacs install marker/d; /# shemacs-scm install marker/d; /# em - bad emacs/d; /# em - shemacs/d; /source.*\.em\.zsh/d; /sourceif.*\.em\.zsh/d; /\[.*\.em\.zsh.*\] && source/d; /source.*\.em\.scm\.zsh/d; /sourceif.*\.em\.scm\.zsh/d; /\[.*\.em\.scm\.zsh.*\] && source/d' "$(HOME)/.zshrc" 2>/dev/null || \
+		sed -i '/# shemacs install marker/d; /# shemacs-scm install marker/d; /# em - bad emacs/d; /# em - shemacs/d; /source.*\.em\.zsh/d; /sourceif.*\.em\.zsh/d; /\[.*\.em\.zsh.*\] && source/d; /source.*\.em\.scm\.zsh/d; /sourceif.*\.em\.scm\.zsh/d; /\[.*\.em\.scm\.zsh.*\] && source/d' "$(HOME)/.zshrc" 2>/dev/null || true
 	@echo "Uninstalled shemacs."
 
 uninstall-scm: ## Remove shemacs Scheme backend from home directory
-	@rm -f "$(HOME)/.em.scm.sh" "$(HOME)/.em.scm" "$(HOME)/.em.scm.cache"
+	@rm -f "$(HOME)/.em.scm.sh" "$(HOME)/.em.scm.zsh" "$(HOME)/.em.scm" "$(HOME)/.em.scm.cache" "$(HOME)/.em.scm.zsh.state"
 	@[ -f "$(HOME)/.bashrc" ] && sed -i '' '/# shemacs-scm install marker/d; /source.*\.em\.scm\.sh/d; /sourceif.*\.em\.scm\.sh/d; /\[.*\.em\.scm\.sh.*\] && source/d' "$(HOME)/.bashrc" 2>/dev/null || \
 		sed -i '/# shemacs-scm install marker/d; /source.*\.em\.scm\.sh/d; /sourceif.*\.em\.scm\.sh/d; /\[.*\.em\.scm\.sh.*\] && source/d' "$(HOME)/.bashrc" 2>/dev/null || true
+	@[ -f "$(HOME)/.zshrc" ] && sed -i '' '/# shemacs-scm install marker/d; /source.*\.em\.scm\.zsh/d; /sourceif.*\.em\.scm\.zsh/d; /\[.*\.em\.scm\.zsh.*\] && source/d' "$(HOME)/.zshrc" 2>/dev/null || \
+		sed -i '/# shemacs-scm install marker/d; /source.*\.em\.scm\.zsh/d; /sourceif.*\.em\.scm\.zsh/d; /\[.*\.em\.scm\.zsh.*\] && source/d' "$(HOME)/.zshrc" 2>/dev/null || true
 	@echo "Uninstalled shemacs Scheme backend."
 
 check: ## Validate shell syntax without running tests
 	@echo "Checking bash version..."
-	@bash -n em.sh && echo "  em.sh:      Syntax OK"
+	@bash -n em.sh && echo "  em.sh:       Syntax OK"
 	@echo "Checking zsh version..."
-	@zsh -n em.zsh && echo "  em.zsh:     Syntax OK"
-	@echo "Checking Scheme launcher..."
-	@bash -n em.scm.sh && echo "  em.scm.sh:  Syntax OK"
+	@zsh -n em.zsh && echo "  em.zsh:      Syntax OK"
+	@echo "Checking Scheme launchers..."
+	@bash -n em.scm.sh && echo "  em.scm.sh:   Syntax OK"
+	@zsh -n em.scm.zsh && echo "  em.scm.zsh:  Syntax OK"
 
 test: check ## Run full integration test suite (requires expect)
 	@./tests/run_tests.sh
