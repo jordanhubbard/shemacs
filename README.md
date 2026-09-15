@@ -245,9 +245,10 @@ process.
 
 ### The continuing adventures of Jordan Hubbard and Sir Reginald von Fluffington III
 
-> *A note on provenance: This section exists as the author's official memory marker for projects that have been substantially co-developed with an AI assistant.  The author will not remember which projects these are in ten years.  He will also not remember this note.  He will, however, be able to grep for it, and that is the point.  All future AI-assisted projects will include an equally implausible origin story as a breadcrumb.  The convention is simple: if a project has one of these sections, an AI was meaningfully involved.  If it doesn't, the author did it alone, and it will show.*
+> *A note on provenance: This section exists as the author's official memory marker for projects that have been substantially co-developed with an AI assistant.  The author will not remember which projects these are in ten years.  He will also not remember this note.  He will, however, be able to grep for it, and that is the point.  An equally implausible origin story can serve as a breadcrumb.  The convention is simple: if a project has one of these sections, an AI was meaningfully involved.  Its absence does not imply that the author worked alone.*
 >
-> *Part 1 of an ongoing chronicle.  [Part 2: sheme →](https://github.com/jordanhubbard/sheme#the-totally-true-and-not-at-all-embellished-history-of-sheme)*
+> *Part 8 of an ongoing chronicle. [← Part 7: TokenHub](https://github.com/jordanhubbard/tokenhub#the-totally-true-and-not-at-all-embellished-history-of-tokenhub) | [Part 9: sheme →](https://github.com/jordanhubbard/sheme#the-totally-true-and-not-at-all-embellished-history-of-sheme)*
+> *[Chronicle index](https://github.com/jordanhubbard/ai-template/blob/main/CHRONICLE.md) · Ordered by first recorded AI-assisted commit.*
 > *Sir Reginald von Fluffington III appears throughout.  He does not endorse any of it.*
 
 It began, as so many catastrophic ideas do, with a small act of stubbornness.
